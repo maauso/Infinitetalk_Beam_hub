@@ -11,7 +11,7 @@ ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
 # Instalar wget
 RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
-# Clonar ComfyUI (ya viene PyTorch, transformers, sageattention en la imagen base)
+# Clonar ComfyUI (PyTorch, transformers y sageattention ya están presentes en la imagen base)
 WORKDIR /
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git && \
     cd /ComfyUI && pip install -r requirements.txt
