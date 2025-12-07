@@ -8,7 +8,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-TASK_ID = "xxxxxxxx"
+if len(sys.argv) < 2:
+    print("❌ Error: TASK_ID not provided.")
+    print("Usage: python retrieve_task.py <TASK_ID>")
+    sys.exit(1)
+TASK_ID = sys.argv[1]
 BEAM_TOKEN = os.getenv("BEAM_TOKEN")
 if not BEAM_TOKEN:
     print("❌ Error: BEAM_TOKEN environment variable not set")
