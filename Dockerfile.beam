@@ -1,4 +1,4 @@
-# Usar la MISMA imagen base que RunPod (ya tiene todo instalado)
+# Imagen base con todas las dependencias necesarias para InfiniteTalk/ComfyUI (preinstaladas)
 FROM wlsdml1114/multitalk-base:1.7
 
 # Variables de entorno
