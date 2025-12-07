@@ -41,15 +41,40 @@ For detailed setup instructions, visit the [Beam Getting Started Guide](https://
 
 ## 🚀 Quick Start
 
-### 1. Clone and Install Dependencies
+### 1. Clone Repository
 
 ```bash
 git clone <your-repo-url>
 cd Infinitetalk_Beam_hub
+```
+
+### 2. Create Python Virtual Environment
+
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+
+# On Windows:
+venv\Scripts\activate
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment Variables
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Environment Variables
 
 ```bash
 # Copy the example environment file
@@ -66,7 +91,7 @@ BEAM_TOKEN=your-beam-token-here
 
 You can find your Beam token at: https://www.beam.cloud/account
 
-### 3. Preload Models to Beam Volume (One-time, ~1 hour)
+### 5. Preload Models to Beam Volume (One-time, ~1 hour)
 
 This downloads ~20GB of models (quantized GGUF, VAE, LoRA) to persistent storage:
 
@@ -83,7 +108,7 @@ beam run preload_models.py:preload_models
 - CLIP Vision - 3.7GB
 - MelBandRoFormer - 320MB
 
-### 4. Deploy the Endpoints
+### 6. Deploy the Endpoints
 
 **Synchronous Endpoint** (30-min timeout):
 ```bash
