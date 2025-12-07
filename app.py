@@ -77,7 +77,7 @@ def on_start():
     logger.info("🚀 Starting initialization...")
     
     # Setup symlinks from Volume to ComfyUI
-    logger.info("� Setting up model symlinks...")
+    logger.info("🔗 Setting up model symlinks...")
     setup_model_symlinks()
     
     # Start ComfyUI in background (without sage-attention - requires nvcc to compile)
