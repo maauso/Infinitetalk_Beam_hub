@@ -75,7 +75,7 @@ def poll_task(task_id, token, retries=5):
 
 def main():
     parser = argparse.ArgumentParser(description="InfiniteTalk Task Queue Client")
-    parser.add_argument("--url", required=True, help="Task Queue Webhoook URL")
+    parser.add_argument("--url", required=True, help="Task Queue Webhook URL")
     parser.add_argument("-i", "--image", required=True, help="Input image (path or URL)")
     parser.add_argument("-a", "--audio", required=True, help="Input audio (path or URL)")
     parser.add_argument("-p", "--prompt", default="A person talking naturally", help="Prompt text")
