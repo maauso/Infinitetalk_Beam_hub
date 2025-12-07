@@ -1,22 +1,21 @@
-# Imagen base con todas las dependencias necesarias para InfiniteTalk/ComfyUI (preinstaladas)
 FROM wlsdml1114/multitalk-base:1.7
 
-# Variables de entorno
+# Environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV CUDA_HOME=/usr/local/cuda
 ENV PATH="/usr/local/cuda/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
 
-# Instalar wget
+# Install wget (same as RunPod)
 RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
-# Clonar ComfyUI (PyTorch, transformers y sageattention ya están presentes en la imagen base)
+# Clone ComfyUI (PyTorch, transformers, sageattention are already included in the base image)
 WORKDIR /
 RUN git clone https://github.com/comfyanonymous/ComfyUI.git && \
     cd /ComfyUI && pip install -r requirements.txt
 
-# Instalar custom nodes de ComfyUI
+# Install custom nodes for ComfyUI
 RUN cd /ComfyUI/custom_nodes && \
     git clone https://github.com/Comfy-Org/ComfyUI-Manager.git && \
     cd ComfyUI-Manager && pip install -r requirements.txt
@@ -44,11 +43,11 @@ RUN cd /ComfyUI/custom_nodes && \
     git clone https://github.com/kijai/ComfyUI-WanVideoWrapper && \
     cd ComfyUI-WanVideoWrapper && pip install -r requirements.txt
 
-# Instalar dependencias adicionales
+# Install additional dependencies
 RUN pip install websocket-client librosa "huggingface_hub[hf_transfer]" pydantic-settings
 
-# Pinnear transformers AL FINAL (igual que RunPod) para evitar que se sobreescriba
+# Pin transformers at the end (same as RunPod) to prevent overwriting
 RUN pip uninstall -y transformers && pip install transformers==4.48.2
 
-# Crear directorios de trabajo
+# Create working directories
 WORKDIR /app

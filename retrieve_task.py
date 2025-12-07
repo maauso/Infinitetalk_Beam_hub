@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-TASK_ID = "ffa96469-869e-4e77-ac44-e3917970cff4"
+TASK_ID = "xxxxxxxx"
 BEAM_TOKEN = os.getenv("BEAM_TOKEN")
 if not BEAM_TOKEN:
     print("❌ Error: BEAM_TOKEN environment variable not set")
