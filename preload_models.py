@@ -1,6 +1,6 @@
 """
-Script para pre-cargar modelos en el Volume de Beam.cloud
-Ejecutar: python preload_models.py
+Script to pre-load models into the Beam.cloud Volume
+Run: python preload_models.py
 """
 
 from beam import function, Image, Volume
@@ -11,18 +11,18 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Mismo volumen que el endpoint
+# Same volume as the endpoint
 MODEL_VOLUME = Volume(name="infinitetalk-models", mount_path="/models")
 
-# Imagen mínima para descargar
+# Minimum image to download
 image = (
     Image(python_version="python3.10")
     .add_commands(["apt-get update && apt-get install -y wget"])
 )
 
-# URLs de modelos
+# Model URLs
 MODEL_DOWNLOADS = [
-    ("https://huggingface.co/Kijai/WanVideo_comfy_GGUF/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk_Single_Q8.gguf", 
+    ("https://huggingface.co/Kijai/WanVideo_comfy_GGUF/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk_Single_Q8.gguf",
      "diffusion_models/Wan2_1-InfiniteTalk_Single_Q8.gguf"),
     ("https://huggingface.co/city96/Wan2.1-I2V-14B-480P-gguf/resolve/main/wan2.1-i2v-14b-480p-Q8_0.gguf",
      "diffusion_models/wan2.1-i2v-14b-480p-Q8_0.gguf"),
@@ -45,25 +45,25 @@ MODEL_DOWNLOADS = [
     memory="4Gi",
     image=image,
     volumes=[MODEL_VOLUME],
-    timeout=3600,  # 1 hora para descargar todo
+    timeout=3600,  # 1 hour to download everything
 )
 def preload_models():
-    """Descarga todos los modelos al Volume"""
-    
+    """Downloads all models to the Volume"""
+
     results = []
-    
+
     for url, relative_path in MODEL_DOWNLOADS:
         dest_path = f"/models/{relative_path}"
-        
+
         if os.path.exists(dest_path):
             size_mb = os.path.getsize(dest_path) / (1024 * 1024)
             logger.info(f"✅ Already exists: {relative_path} ({size_mb:.1f} MB)")
             results.append({"file": relative_path, "status": "exists", "size_mb": size_mb})
             continue
-        
+
         # Create directory
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        
+
         logger.info(f"📥 Downloading: {url}")
         try:
             result = subprocess.run(
@@ -82,14 +82,14 @@ def preload_models():
         except Exception as e:
             logger.error(f"❌ Error: {e}")
             results.append({"file": relative_path, "status": "error", "error": str(e)})
-    
+
     # List all files in volume
     total_size = 0
     for root, dirs, files in os.walk("/models"):
         for f in files:
             path = os.path.join(root, f)
             total_size += os.path.getsize(path)
-    
+
     return {
         "results": results,
         "total_size_gb": total_size / (1024 * 1024 * 1024)
@@ -97,7 +97,7 @@ def preload_models():
 
 
 if __name__ == "__main__":
-    # Ejecuta la función en Beam.cloud
+    # Executes the function on Beam.cloud
     print("🚀 Starting model preload on Beam.cloud...")
     result = preload_models.remote()
     print(f"✅ Result: {result}")

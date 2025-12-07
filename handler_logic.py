@@ -1,6 +1,6 @@
 """
-Lógica de procesamiento de InfiniteTalk para Beam.cloud
-Adaptado de example/handler.py sin dependencias de RunPod
+Processing logic for InfiniteTalk on Beam.cloud
+Adapted from example/handler.py without dependencies on RunPod
 """
 
 import os
@@ -94,10 +94,10 @@ def queue_prompt(prompt, client_id):
     logger.info(f"Queueing prompt to: {url}")
     p = {"prompt": prompt, "client_id": client_id}
     data = json.dumps(p).encode("utf-8")
-    
+
     req = urllib.request.Request(url, data=data)
     req.add_header("Content-Type", "application/json")
-    
+
     try:
         response = urllib.request.urlopen(req)
         result = json.loads(response.read())
@@ -123,7 +123,7 @@ def get_videos(ws, prompt, client_id):
     """Execute workflow and get output videos"""
     prompt_id = queue_prompt(prompt, client_id)["prompt_id"]
     logger.info(f"Workflow started: prompt_id={prompt_id}")
-    
+
     output_videos = {}
     while True:
         out = ws.recv()
@@ -138,9 +138,9 @@ def get_videos(ws, prompt, client_id):
                     break
         else:
             continue
-    
+
     history = get_history(prompt_id)[prompt_id]
-    
+
     for node_id in history["outputs"]:
         node_output = history["outputs"][node_id]
         videos_output = []
@@ -151,7 +151,7 @@ def get_videos(ws, prompt, client_id):
                     logger.info(f"Video found: {video_path}")
                     videos_output.append(video_path)
         output_videos[node_id] = videos_output
-    
+
     return output_videos
 
 
@@ -177,7 +177,7 @@ def calculate_max_frames_from_audio(wav_path, fps=25):
     if duration is None:
         logger.warning("Could not calculate audio duration. Using default 81.")
         return 81
-    
+
     max_frames = int(duration * fps) + 81
     logger.info(f"Audio duration: {duration:.2f}s, calculated max_frames: {max_frames}")
     return max_frames
@@ -186,7 +186,7 @@ def calculate_max_frames_from_audio(wav_path, fps=25):
 def process_infinitetalk(inputs: dict) -> dict:
     """
     Process InfiniteTalk request
-    
+
     Compatible with RunPod API format:
     - input_type: "image" (only I2V_single supported)
     - image_url/image_base64/image_path
@@ -195,19 +195,19 @@ def process_infinitetalk(inputs: dict) -> dict:
     """
     client_id = str(uuid.uuid4())
     task_id = f"task_{uuid.uuid4()}"
-    
+
     # Log input (truncate base64)
     log_input = inputs.copy()
     for key in ["image_base64", "wav_base64"]:
         if key in log_input:
             log_input[key] = truncate_base64_for_log(log_input[key])
     logger.info(f"Received input: {log_input}")
-    
+
     # Only I2V_single supported
     input_type = inputs.get("input_type", "image")
     if input_type != "image":
         return {"error": "Only input_type='image' is supported (I2V_single)"}
-    
+
     # Process image input
     image_path = None
     if "image_path" in inputs:
@@ -218,7 +218,7 @@ def process_infinitetalk(inputs: dict) -> dict:
         image_path = process_input(inputs["image_base64"], task_id, "input_image.jpg", "base64")
     else:
         return {"error": "Image input required (image_path, image_url, or image_base64)"}
-    
+
     # Process audio input
     wav_path = None
     if "wav_path" in inputs:
@@ -229,23 +229,23 @@ def process_infinitetalk(inputs: dict) -> dict:
         wav_path = process_input(inputs["wav_base64"], task_id, "input_audio.wav", "base64")
     else:
         return {"error": "Audio input required (wav_path, wav_url, or wav_base64)"}
-    
+
     # Get parameters
     prompt_text = inputs.get("prompt", "A person talking naturally")
     width = inputs.get("width", 512)
     height = inputs.get("height", 512)
-    
+
     # Calculate max_frame from audio if not provided
     max_frame = inputs.get("max_frame")
     if max_frame is None:
         max_frame = calculate_max_frames_from_audio(wav_path)
-    
+
     logger.info(f"Settings: prompt='{prompt_text}', width={width}, height={height}, max_frame={max_frame}")
-    
+
     # Load workflow (Beam syncs files to /mnt/code/)
     workflow_path = "/mnt/code/I2V_single.json"
     prompt = load_workflow(workflow_path)
-    
+
     # ------------------------------------------------------------------
     # Dynamic Force Offload configuration
     # ------------------------------------------------------------------
@@ -276,13 +276,13 @@ def process_infinitetalk(inputs: dict) -> dict:
     else:
         logger.warning("⚠️ Warning: WanVideoSampler node not found. Using workflow defaults.")
     # ------------------------------------------------------------------
-    
+
     # Validate files exist
     if not os.path.exists(image_path):
         return {"error": f"Image file not found: {image_path}"}
     if not os.path.exists(wav_path):
         return {"error": f"Audio file not found: {wav_path}"}
-    
+
     # Configure workflow nodes
     prompt["284"]["inputs"]["image"] = image_path
     prompt["125"]["inputs"]["audio"] = wav_path
@@ -290,11 +290,11 @@ def process_infinitetalk(inputs: dict) -> dict:
     prompt["245"]["inputs"]["value"] = width
     prompt["246"]["inputs"]["value"] = height
     prompt["270"]["inputs"]["value"] = max_frame
-    
+
     # Connect to ComfyUI WebSocket
     ws_url = f"ws://{SERVER_ADDRESS}:8188/ws?clientId={client_id}"
     logger.info(f"Connecting to WebSocket: {ws_url}")
-    
+
     ws = websocket.WebSocket()
     max_attempts = 36  # 3 minutes
     for attempt in range(max_attempts):
@@ -307,30 +307,30 @@ def process_infinitetalk(inputs: dict) -> dict:
             if attempt == max_attempts - 1:
                 return {"error": "WebSocket connection timeout (3 minutes)"}
             time.sleep(5)
-    
+
     # Execute workflow
     videos = get_videos(ws, prompt, client_id)
     ws.close()
     logger.info("WebSocket closed")
-    
+
     # Find output video
     output_video_path = None
     for node_id in videos:
         if videos[node_id]:
             output_video_path = videos[node_id][0]
             break
-    
+
     if not output_video_path:
         return {"error": "No output video found"}
-    
+
     if not os.path.exists(output_video_path):
         return {"error": f"Output video file not found: {output_video_path}"}
-    
+
     # Encode video to base64
     try:
         with open(output_video_path, "rb") as f:
             video_data = base64.b64encode(f.read()).decode("utf-8")
-        
+
         logger.info(f"✅ Video encoded: {len(video_data)} chars")
         return {"video": video_data}
     except Exception as e:
