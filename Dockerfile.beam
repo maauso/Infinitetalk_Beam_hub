@@ -1,0 +1,53 @@
+FROM wlsdml1114/multitalk-base:1.7
+
+# Environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH="/usr/local/cuda/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
+
+# Install wget (same as RunPod)
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
+# Clone ComfyUI (PyTorch, transformers, sageattention are already included in the base image)
+WORKDIR /
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git && \
+    cd /ComfyUI && pip install -r requirements.txt
+
+# Install custom nodes for ComfyUI
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/Comfy-Org/ComfyUI-Manager.git && \
+    cd ComfyUI-Manager && pip install -r requirements.txt
+
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/city96/ComfyUI-GGUF && \
+    cd ComfyUI-GGUF && pip install -r requirements.txt
+
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/kijai/ComfyUI-KJNodes && \
+    cd ComfyUI-KJNodes && pip install -r requirements.txt
+
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite && \
+    cd ComfyUI-VideoHelperSuite && pip install -r requirements.txt
+
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/orssorbit/ComfyUI-wanBlockswap
+
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/kijai/ComfyUI-MelBandRoFormer && \
+    cd ComfyUI-MelBandRoFormer && pip install -r requirements.txt
+
+RUN cd /ComfyUI/custom_nodes && \
+    git clone https://github.com/kijai/ComfyUI-WanVideoWrapper && \
+    cd ComfyUI-WanVideoWrapper && pip install -r requirements.txt
+
+# Install additional dependencies
+RUN pip install websocket-client librosa "huggingface_hub[hf_transfer]" pydantic-settings
+
+# Pin transformers at the end (same as RunPod) to prevent overwriting
+RUN pip uninstall -y transformers && pip install transformers==4.48.2
+
+# Create working directories
+WORKDIR /app

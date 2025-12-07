@@ -1,0 +1,5 @@
+beam-sdk
+requests
+tqdm
+emoji
+python-dotenv
