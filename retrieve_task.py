@@ -64,7 +64,6 @@ while True:
             # Beam might put return value in a specific field?
             # Or maybe we can't retrieve return values from Task Queue like this?
             # Let's hope it is in there.
-            pass
         break
 
     if status in ["FAILED", "CANCELED"]:
