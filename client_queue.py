@@ -33,12 +33,7 @@ def file_to_base64(path):
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
-def get_queue_url_from_name(app_name):
-    # This is a bit tricky without the CLI.
-    # Usually we get the URL from `beam deployment list`
-    # For now, let's ask the user to provide the Queue ID or URL after deployment.
-    # OR we can try to guess/construct it if we knew the ID.
-    pass
+# (Removed dead code: get_queue_url_from_name)
 
 def submit_task(queue_url, token, payload):
     headers = {
