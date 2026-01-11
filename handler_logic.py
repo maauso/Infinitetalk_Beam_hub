@@ -183,13 +183,156 @@ def calculate_max_frames_from_audio(wav_path, fps=25):
     return max_frames
 
 
+def process_v2v(inputs: dict) -> dict:
+    """
+    Process Video-to-Video request (V2V_single)
+
+    Args:
+        video_url/video_base64/video_path: Input video
+        wav_url/wav_base64/wav_path: Input audio file
+        prompt: Description text (default: "A person talking naturally")
+        width: Output width (default: 640)
+        height: Output height (default: 640)
+        max_frame: Max frames (auto-calculated from audio if not provided)
+        force_offload: Enable GPU offloading to save VRAM (default: True)
+
+    Returns:
+        {"video": "base64_encoded_video"} on success
+        {"error": "message"} on failure
+    """
+    client_id = str(uuid.uuid4())
+    task_id = f"task_{uuid.uuid4()}"
+
+    # Log input (truncate base64)
+    log_input = inputs.copy()
+    for key in ["video_base64", "wav_base64"]:
+        if key in log_input:
+            log_input[key] = truncate_base64_for_log(log_input[key])
+    logger.info(f"[V2V] Received input: {log_input}")
+
+    # Process video input
+    video_path = None
+    if "video_path" in inputs:
+        video_path = process_input(inputs["video_path"], task_id, "input_video.mp4", "path")
+    elif "video_url" in inputs:
+        video_path = process_input(inputs["video_url"], task_id, "input_video.mp4", "url")
+    elif "video_base64" in inputs:
+        video_path = process_input(inputs["video_base64"], task_id, "input_video.mp4", "base64")
+    else:
+        return {"error": "Video input required (video_path, video_url, or video_base64)"}
+
+    # Process audio input
+    wav_path = None
+    if "wav_path" in inputs:
+        wav_path = process_input(inputs["wav_path"], task_id, "input_audio.wav", "path")
+    elif "wav_url" in inputs:
+        wav_path = process_input(inputs["wav_url"], task_id, "input_audio.wav", "url")
+    elif "wav_base64" in inputs:
+        wav_path = process_input(inputs["wav_base64"], task_id, "input_audio.wav", "base64")
+    else:
+        return {"error": "Audio input required (wav_path, wav_url, or wav_base64)"}
+
+    # Get parameters
+    prompt_text = inputs.get("prompt", "A person talking naturally")
+    width = inputs.get("width", 640)
+    height = inputs.get("height", 640)
+
+    # Calculate max_frame from audio if not provided
+    max_frame = inputs.get("max_frame")
+    if max_frame is None:
+        max_frame = calculate_max_frames_from_audio(wav_path)
+
+    logger.info(f"[V2V] Settings: prompt='{prompt_text}', width={width}, height={height}, max_frame={max_frame}")
+
+    # Load V2V workflow
+    workflow_path = "/mnt/code/V2V_single.json"
+    prompt = load_workflow(workflow_path)
+
+    # Configure force_offload
+    force_offload = inputs.get("force_offload", True)
+    logger.info(f"🔧 [V2V] Settings: force_offload={force_offload}")
+
+    # Inject force_offload into WanVideoSampler node (ID 128)
+    sampler_node_id = "128"
+    if sampler_node_id in prompt and prompt[sampler_node_id].get("class_type") == "WanVideoSampler":
+        prompt[sampler_node_id].setdefault("inputs", {})["force_offload"] = force_offload
+        logger.info(f"✅ [V2V] Node {sampler_node_id} (WanVideoSampler) updated: force_offload={force_offload}")
+
+    # Validate files exist
+    if not os.path.exists(video_path):
+        return {"error": f"Video file not found: {video_path}"}
+    if not os.path.exists(wav_path):
+        return {"error": f"Audio file not found: {wav_path}"}
+
+    # Configure V2V workflow nodes
+    prompt["228"]["inputs"]["video"] = video_path  # VHS_LoadVideo
+    prompt["125"]["inputs"]["audio"] = wav_path    # LoadAudio
+    prompt["241"]["inputs"]["positive_prompt"] = prompt_text  # TextEncode
+    prompt["245"]["inputs"]["value"] = width       # Width
+    prompt["246"]["inputs"]["value"] = height      # Height
+    prompt["270"]["inputs"]["value"] = max_frame   # Max frames
+
+    # Connect to ComfyUI WebSocket
+    ws_url = f"ws://{SERVER_ADDRESS}:8188/ws?clientId={client_id}"
+    logger.info(f"[V2V] Connecting to WebSocket: {ws_url}")
+
+    ws = websocket.WebSocket()
+    max_attempts = 36  # 3 minutes
+    for attempt in range(max_attempts):
+        try:
+            ws.connect(ws_url)
+            logger.info(f"[V2V] WebSocket connected (attempt {attempt+1})")
+            break
+        except Exception as e:
+            logger.warning(f"[V2V] WebSocket connection failed (attempt {attempt+1}/{max_attempts}): {e}")
+            if attempt == max_attempts - 1:
+                return {"error": "WebSocket connection timeout (3 minutes)"}
+            time.sleep(5)
+
+    # Execute workflow
+    videos = get_videos(ws, prompt, client_id)
+    ws.close()
+    logger.info("[V2V] WebSocket closed")
+
+    # Find output video
+    output_video_path = None
+    for node_id in videos:
+        if videos[node_id]:
+            output_video_path = videos[node_id][0]
+            break
+
+    if not output_video_path:
+        return {"error": "No output video found"}
+
+    if not os.path.exists(output_video_path):
+        return {"error": f"Output video file not found: {output_video_path}"}
+
+    # Encode video to base64
+    try:
+        with open(output_video_path, "rb") as f:
+            video_data = base64.b64encode(f.read()).decode("utf-8")
+
+        logger.info(f"✅ [V2V] Video encoded: {len(video_data)} chars")
+        return {"video": video_data}
+    except Exception as e:
+        logger.error(f"❌ [V2V] Base64 encoding failed: {e}")
+        return {"error": f"Base64 encoding failed: {e}"}
+
+
 def process_infinitetalk(inputs: dict) -> dict:
     """
-    Process InfiniteTalk request
+    Process InfiniteTalk request - Routes to I2V or V2V based on input_type
 
     Compatible with RunPod API format:
-    - input_type: "image" (only I2V_single supported)
+    - input_type: "image" (I2V_single) or "video" (V2V_single)
+
+    For I2V (input_type="image"):
     - image_url/image_base64/image_path
+    - wav_url/wav_base64/wav_path
+    - prompt, width, height, max_frame
+
+    For V2V (input_type="video"):
+    - video_url/video_base64/video_path
     - wav_url/wav_base64/wav_path
     - prompt, width, height, max_frame
     """
@@ -198,17 +341,22 @@ def process_infinitetalk(inputs: dict) -> dict:
 
     # Log input (truncate base64)
     log_input = inputs.copy()
-    for key in ["image_base64", "wav_base64"]:
+    for key in ["image_base64", "video_base64", "wav_base64"]:
         if key in log_input:
             log_input[key] = truncate_base64_for_log(log_input[key])
     logger.info(f"Received input: {log_input}")
 
-    # Only I2V_single supported
+    # Route to appropriate handler based on input_type
     input_type = inputs.get("input_type", "image")
-    if input_type != "image":
-        return {"error": "Only input_type='image' is supported (I2V_single)"}
 
-    # Process image input
+    if input_type == "video":
+        logger.info("🎬 Routing to V2V handler")
+        return process_v2v(inputs)
+    elif input_type != "image":
+        return {"error": f"Unsupported input_type='{input_type}'. Use 'image' (I2V) or 'video' (V2V)"}
+
+    # I2V: Process image input
+    logger.info("📸 Processing I2V (Image-to-Video)")
     image_path = None
     if "image_path" in inputs:
         image_path = process_input(inputs["image_path"], task_id, "input_image.jpg", "path")
