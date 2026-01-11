@@ -252,11 +252,27 @@ def process_v2v(inputs: dict) -> dict:
     force_offload = inputs.get("force_offload", True)
     logger.info(f"🔧 [V2V] Settings: force_offload={force_offload}")
 
-    # Inject force_offload into WanVideoSampler node (ID 128)
+    # Inject force_offload into WanVideoSampler node
     sampler_node_id = "128"
-    if sampler_node_id in prompt and prompt[sampler_node_id].get("class_type") == "WanVideoSampler":
-        prompt[sampler_node_id].setdefault("inputs", {})["force_offload"] = force_offload
+    sampler_node = None
+
+    # First try the hardcoded node ID for backwards compatibility
+    if sampler_node_id in prompt and isinstance(prompt[sampler_node_id], dict) and prompt[sampler_node_id].get("class_type") == "WanVideoSampler":
+        sampler_node = prompt[sampler_node_id]
+    else:
+        # Fallback: search by class_type in case the node ID has changed
+        for node_id, node in prompt.items():
+            if isinstance(node, dict) and node.get("class_type") == "WanVideoSampler":
+                sampler_node_id = node_id
+                sampler_node = node
+                logger.info(f"ℹ️ [V2V] Found WanVideoSampler node by class_type with ID {sampler_node_id}")
+                break
+
+    if sampler_node is not None:
+        sampler_node.setdefault("inputs", {})["force_offload"] = force_offload
         logger.info(f"✅ [V2V] Node {sampler_node_id} (WanVideoSampler) updated: force_offload={force_offload}")
+    else:
+        logger.warning("⚠️ [V2V] WanVideoSampler node not found. Using workflow defaults.")
 
     # Validate files exist
     if not os.path.exists(video_path):
