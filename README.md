@@ -1,11 +1,13 @@
 # InfiniteTalk Beam.cloud Deployment
 
-Generate lip-sync videos from static images and audio using InfiniteTalk on Beam.cloud infrastructure. This project deploys a complete ComfyUI-based video generation pipeline with both synchronous and asynchronous processing modes.
+Generate lip-sync videos from images/videos and audio using [InfiniteTalk](https://github.com/Kijai/InfiniteTalk) on Beam.cloud infrastructure. This project deploys a complete ComfyUI-based video generation pipeline with asynchronous task queue processing via RESTful API.
 
 ## 🎯 Features
 
-- **Lip-sync video generation**: Transform static portraits into talking videos
-- **Dual deployment modes**: Synchronous endpoint for quick jobs, async task queue for long videos
+- **Dual video generation modes**:
+  - **I2V (Image-to-Video)**: Transform static portraits into talking videos
+  - **V2V (Video-to-Video)**: Re-sync lips on existing videos with new audio
+- **Asynchronous task queue**: Handle long-running jobs (up to 60 min) without timeouts
 - **Flexible input formats**: Support for file paths, URLs, and base64-encoded data
 - **Persistent model storage**: 20GB+ models stored in Beam Volume for fast cold starts
 - **Auto frame calculation**: Automatically determines video length from audio duration
@@ -21,11 +23,8 @@ Generate lip-sync videos from static images and audio using InfiniteTalk on Beam
 
 ```bash
 # Using pip
-pip install beam-sdk
+pip install beam-client
 
-# Or using homebrew (macOS)
-brew tap slai-labs/homebrew-tap
-brew install beam
 ```
 
 ### Configure Beam Authentication
@@ -102,96 +101,119 @@ beam run preload_models.py:preload_models
 - CLIP Vision - 3.7GB
 - MelBandRoFormer - 320MB
 
-### 6. Deploy the Endpoints
+### 6. Deploy the Task Queue
 
-**Synchronous Endpoint** (30-min timeout):
-```bash
-beam deploy app.py:handler
-```
-
-**Async Task Queue** (1-hour timeout, recommended):
+Deploy the asynchronous task queue (1-hour timeout):
 ```bash
 beam deploy app.py:queue_handler
 ```
 
-After deployment, Beam will provide webhook URLs for your endpoints.
-
-## 📡 API Usage
-
-### Synchronous Endpoint
-
-```python
-import requests
-import base64
-
-# Encode your files
-with open("portrait.jpg", "rb") as f:
-    image_b64 = base64.b64encode(f.read()).decode()
-with open("audio.wav", "rb") as f:
-    audio_b64 = base64.b64encode(f.read()).decode()
-
-# Make request
-response = requests.post(
-    "https://api.beam.cloud/your-endpoint-url",
-    json={
-        "image_base64": image_b64,
-        "wav_base64": audio_b64,
-        "prompt": "A person talking naturally",
-        "width": 512,
-        "height": 512,
-        "force_offload": True
-    },
-    headers={"Authorization": "Bearer YOUR_BEAM_TOKEN"}
-)
-
-# Get video
-video_data = response.json()["video"]
-with open("output.mp4", "wb") as f:
-    f.write(base64.b64decode(video_data))
+After deployment, Beam will provide a webhook URL like:
+```
+https://api.beam.cloud/taskqueue/abc123/tasks
 ```
 
-### Async Task Queue (Recommended for Long Videos)
+## 📡 Usage
 
-Use the provided client script:
+### Image-to-Video (I2V)
 
 ```bash
+# Using local files
 python client_queue.py \
-  --url https://api.beam.cloud/v1/task_queue/YOUR_QUEUE_ID/tasks \
+  --url https://api.beam.cloud/taskqueue/abc123/tasks \
+  --mode i2v \
   -i portrait.jpg \
-  -a audio.wav \
-  -p "A person talking naturally" \
-  -w 512 \
-  -H 512 \
-  -o output.mp4
+  -a speech.wav \
+  -p "A woman speaking calmly" \
+  -w 384 -H 384 \
+  -o output_i2v.mp4
+
+# Using URLs
+python client_queue.py \
+  --url https://api.beam.cloud/taskqueue/abc123/tasks \
+  --mode i2v \
+  -i https://example.com/face.jpg \
+  -a https://example.com/audio.wav
 ```
 
-**Client features:**
-- Automatic task submission and polling
-- Progress bar with status updates
-- Automatic video download on completion
+### Video-to-Video (V2V)
+
+```bash
+# Re-sync lips on existing video with new audio
+python client_queue.py \
+  --url https://api.beam.cloud/taskqueue/abc123/tasks \
+  --mode v2v \
+  -v input_video.mp4 \
+  -a new_audio.wav \
+  -p "A person singing" \
+  -w 640 -H 640 \
+  -o output_v2v.mp4
+
+# Using URLs
+python client_queue.py \
+  --url https://api.beam.cloud/taskqueue/abc123/tasks \
+  --mode v2v \
+  -v https://example.com/video.mp4 \
+  -a https://example.com/audio.wav
+```
+
+### Monitor Task Progress
+
+The client script automatically:
+1. Validates inputs based on selected mode
+2. Submits the task to Beam queue
+3. Polls for completion every 5s with progress bar
+4. Downloads the output video from Beam storage
+5. Saves to specified filename
+
+```bash
+🎬 Mode: I2V (Image-to-Video)
+🚀 Submitting task to https://...
+✅ Task ID: task_abc123
+⏳ Waiting for completion...
+Status: RUNNING |█████████████          | 60/100 [01:23]
+🎉 Task Completed!
+📥 Downloading video from: https://...
+✅ Video saved to output.mp4
+```
 - Support for local files or URLs
 
 ## 🎛️ API Parameters
 
+### Common Parameters (I2V & V2V)
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `image_path`/`image_url`/`image_base64` | string | required | Input portrait image |
+| `input_type` | string | `"image"` | Mode: `"image"` (I2V) or `"video"` (V2V) |
 | `wav_path`/`wav_url`/`wav_base64` | string | required | Input audio file (WAV) |
 | `prompt` | string | `"A person talking naturally"` | Description text for generation |
-| `width` | integer | `512` | Output video width (pixels) |
-| `height` | integer | `512` | Output video height (pixels) |
+| `width` | integer | 384 (I2V), 640 (V2V) | Output video width (pixels) |
+| `height` | integer | 384 (I2V), 640 (V2V) | Output video height (pixels) |
 | `max_frame` | integer | auto-calculated | Max frames (auto: `audio_duration_sec * 25fps + 81`) |
 | `force_offload` | boolean | `true` | Enable GPU offloading (trades speed for VRAM) |
+
+### I2V-Specific Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `image_path`/`image_url`/`image_base64` | string | ✅ Yes | Input portrait image |
+
+### V2V-Specific Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `video_path`/`video_url`/`video_base64` | string | ✅ Yes | Input video file |
 
 ## 🗂️ Project Structure
 
 ```
-├── app.py                 # Beam endpoints (sync + async)
-├── handler_logic.py       # Core processing logic
+├── app.py                 # Beam task queue endpoint
+├── handler_logic.py       # Core processing logic (I2V + V2V)
 ├── preload_models.py      # Model downloader to Volume
-├── client_queue.py        # Async queue client script
+├── client_queue.py        # Unified async client (I2V & V2V)
 ├── retrieve_task.py       # Debug/recovery script
-├── I2V_single.json        # ComfyUI workflow (423 lines)
+├── I2V_single.json        # ComfyUI workflow for Image-to-Video
+├── V2V_single.json        # ComfyUI workflow for Video-to-Video
 ├── Dockerfile.beam        # Custom Docker image
 ├── requirements.txt       # Python dependencies
 ├── .env                   # Local configuration (git-ignored)
@@ -202,12 +224,24 @@ python client_queue.py \
 
 ### Modify Video Generation Settings
 
-Edit `handler_logic.py` to change ComfyUI workflow parameters:
+Edit [handler_logic.py](handler_logic.py) to change ComfyUI workflow parameters:
 
+**For I2V:**
 ```python
-# Line ~285-290 in process_infinitetalk()
-prompt["245"]["inputs"]["value"] = width   # Node 245 = width
-prompt["246"]["inputs"]["value"] = height  # Node 246 = height
+# Line ~420 in process_infinitetalk()
+prompt["284"]["inputs"]["image"] = image_path
+prompt["245"]["inputs"]["value"] = width
+prompt["246"]["inputs"]["value"] = height
+prompt["270"]["inputs"]["value"] = max_frame
+prompt["128"]["inputs"]["force_offload"] = force_offload
+```
+
+**For V2V:**
+```python
+# Line ~275 in process_v2v()
+prompt["228"]["inputs"]["video"] = video_path  # VHS_LoadVideo
+prompt["245"]["inputs"]["value"] = width
+prompt["246"]["inputs"]["value"] = height
 prompt["270"]["inputs"]["value"] = max_frame
 prompt["128"]["inputs"]["force_offload"] = force_offload
 ```

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Beam.cloud Task Queue Client for InfiniteTalk
+Supports both Image-to-Video (I2V) and Video-to-Video (V2V) modes.
 Submits jobs asynchronously and polls for completion.
 """
 
@@ -69,36 +70,75 @@ def poll_task(task_id, token, retries=5):
             raise e
 
 def main():
-    parser = argparse.ArgumentParser(description="InfiniteTalk Task Queue Client")
+    parser = argparse.ArgumentParser(
+        description="InfiniteTalk Task Queue Client - Supports I2V and V2V",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  I2V: python client_queue.py --url <URL> -i image.jpg -a audio.wav
+  V2V: python client_queue.py --url <URL> --mode v2v -v video.mp4 -a audio.wav
+        """
+    )
     parser.add_argument("--url", required=True, help="Task Queue Webhook URL")
-    parser.add_argument("-i", "--image", required=True, help="Input image (path or URL)")
+    parser.add_argument("--mode", choices=["i2v", "v2v"], default="i2v", help="Mode: i2v (Image-to-Video) or v2v (Video-to-Video) [default: i2v]")
+    parser.add_argument("-i", "--image", help="Input image (path or URL) - Required for I2V mode")
+    parser.add_argument("-v", "--video", help="Input video (path or URL) - Required for V2V mode")
     parser.add_argument("-a", "--audio", required=True, help="Input audio (path or URL)")
     parser.add_argument("-p", "--prompt", default="A person talking naturally", help="Prompt text")
-    parser.add_argument("-w", "--width", type=int, default=384, help="Width")
-    parser.add_argument("-H", "--height", type=int, default=540, help="Height")
+    parser.add_argument("-w", "--width", type=int, help="Width (default: 384 for I2V, 640 for V2V)")
+    parser.add_argument("-H", "--height", type=int, help="Height (default: 384 for I2V, 640 for V2V)")
     parser.add_argument("-o", "--output", default="output.mp4", help="Output filename")
     parser.add_argument("--force-offload", action="store_true", default=None, help="Enable force offload (default: True in handler)")
     parser.add_argument("--no-force-offload", action="store_false", dest="force_offload", help="Disable force offload")
 
     args = parser.parse_args()
 
+    # Validate mode-specific inputs
+    if args.mode == "i2v":
+        if not args.image:
+            parser.error("--image is required for I2V mode")
+        input_type = "image"
+        default_width = 384
+        default_height = 384
+    else:  # v2v
+        if not args.video:
+            parser.error("--video is required for V2V mode")
+        input_type = "video"
+        default_width = 640
+        default_height = 640
+
+    # Set defaults for width/height based on mode
+    width = args.width if args.width else default_width
+    height = args.height if args.height else default_height
+
     # Prepare payload
     payload = {
+        "input_type": input_type,
         "prompt": args.prompt,
-        "width": args.width,
-        "height": args.height
+        "width": width,
+        "height": height
     }
 
     if args.force_offload is not None:
         payload["force_offload"] = args.force_offload
 
-    # Process Image
-    if args.image.startswith("http"):
-        payload["image_url"] = args.image
-        print(f"📷 Image URL: {args.image}")
-    else:
-        print(f"📷 Image File: {args.image}")
-        payload["image_base64"] = file_to_base64(args.image)
+    # Process Image (I2V mode)
+    if args.mode == "i2v":
+        if args.image.startswith("http"):
+            payload["image_url"] = args.image
+            print(f"📷 Image URL: {args.image}")
+        else:
+            print(f"📷 Image File: {args.image}")
+            payload["image_base64"] = file_to_base64(args.image)
+
+    # Process Video (V2V mode)
+    if args.mode == "v2v":
+        if args.video.startswith("http"):
+            payload["video_url"] = args.video
+            print(f"📹 Video URL: {args.video}")
+        else:
+            print(f"📹 Video File: {args.video}")
+            payload["video_base64"] = file_to_base64(args.video)
 
     # Process Audio
     if args.audio.startswith("http"):
@@ -108,6 +148,8 @@ def main():
         print(f"🔊 Audio File: {args.audio}")
         payload["wav_base64"] = file_to_base64(args.audio)
 
+    mode_label = "I2V (Image-to-Video)" if args.mode == "i2v" else "V2V (Video-to-Video)"
+    print(f"\n🎬 Mode: {mode_label}")
     print(f"🚀 Submitting task to {args.url}...")
     task_id = submit_task(args.url, BEAM_TOKEN, payload)
     print(f"✅ Task ID: {task_id}")
