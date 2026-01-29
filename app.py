@@ -114,7 +114,7 @@ def on_start():
 
 @endpoint(
     name="infinitetalk",
-    cpu=2,
+    cpu=1,
     memory="42Gi",
     gpu="RTX4090",
     image=image,
