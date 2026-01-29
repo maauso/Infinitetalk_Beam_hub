@@ -22,10 +22,21 @@ image = (
 
 # Model URLs
 MODEL_DOWNLOADS = [
+    # OLD GGUF models (kept temporarily for rollback, can remove after testing)
     ("https://huggingface.co/Kijai/WanVideo_comfy_GGUF/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk_Single_Q8.gguf",
      "diffusion_models/Wan2_1-InfiniteTalk_Single_Q8.gguf"),
     ("https://huggingface.co/city96/Wan2.1-I2V-14B-480P-gguf/resolve/main/wan2.1-i2v-14b-480p-Q8_0.gguf",
      "diffusion_models/wan2.1-i2v-14b-480p-Q8_0.gguf"),
+
+    # NEW fp8 models (active)
+    ("https://huggingface.co/Kijai/WanVideo_comfy_fp8_scaled/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk-Single_fp8_e4m3fn_scaled_KJ.safetensors",
+     "diffusion_models/Wan2_1-InfiniteTalk-Single_fp8_e4m3fn_scaled_KJ.safetensors"),
+    ("https://huggingface.co/Kijai/WanVideo_comfy_fp8_scaled/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk-Multi_fp8_e4m3fn_scaled_KJ.safetensors",
+     "diffusion_models/Wan2_1-InfiniteTalk-Multi_fp8_e4m3fn_scaled_KJ.safetensors"),
+    ("https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1-I2V-14B-480P_fp8_e4m3fn.safetensors",
+     "diffusion_models/Wan2_1-I2V-14B-480P_fp8_e4m3fn.safetensors"),
+
+    # Common models (unchanged)
     ("https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
      "loras/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors"),
     ("https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors",
